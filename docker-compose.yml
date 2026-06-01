@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bookstore_user
+      POSTGRES_PASSWORD: bookstore_pass
+      POSTGRES_DB: bookstore_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bookstore_user -d bookstore_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  payment_mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://bookstore_user:bookstore_pass@db:5432/bookstore_db
+      SECRET_KEY: super-secret-key-change-in-production-32-chars-min
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      PAYMENT_MOCK_URL: http://payment_mock:8001
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      payment_mock:
+        condition: service_started
+
+volumes:
+  postgres_data:
